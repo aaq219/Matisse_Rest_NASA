@@ -10,9 +10,7 @@ import argparse
 
 import logging
 
-__REST_NASA__ = 'http://oderest.rsl.wustl.edu/live2/?query=p&output=XML&r=Mf'
-
-test_url='http://oderest.rsl.wustl.edu/live2/?target=moon&query=p&output=XML&ihid=CH1-ORB&iid=M3&pt=CALIV3&r=fm&westernlon=10&easternlon=15&minlat=20&maxlat=25'
+__REST_NASA__ = 'http://oderest.rsl.wustl.edu/live2/?target=moon&query=p&output=XML&'
 
 """
 
@@ -54,6 +52,7 @@ required  arguments:
   --target TARGET       PDS target name
   --ihid IHID           instrument host ID
   --iid IID             instrument ID
+  --pt PT               product type
 """
 
 
@@ -70,12 +69,14 @@ class NASAQuery(object):
       target (str): target to query
       ihid (str): ID
       iid (str): instrument ID
+      pt (str): product type
     """
-    def __init__(self, target=None, ihid=None, iid=None, **parameters):
+    def __init__(self, target=None, ihid=None, iid=None, pt=None, **parameters):
 
         self.target = target
         self.ihid = ihid
         self.iid = iid
+        self.pt = pt
         #not mandatory parameter, this takes parameters dynamical
         for name, value in parameters.iteritems():
             setattr(self, name, value)
@@ -94,20 +95,6 @@ class NASAQuery(object):
                                if value])
 
         return __REST_NASA__ + '&pt=cdrnac&' + parameters, __REST_NASA__ + '&pt=ddrnac&' +parameters
-
-
-    def composeURLMoon(self):
-        """
-         Need to compose two URLs:
-         1- product type pt=cdrnac -> calibrated products
-         2- product type pt=ddrnac -> derived  products
-         Return: the two urls
-        """
-
-        parameters = '&'.join(['%s=%s' % (item, value) for item, value in self.__dict__.iteritems()
-                               if value])
-
-        return [__REST_NASA__ + '&pt=CALIV3&' + parameters]
 
     @staticmethod
     def read_nodelist(nodelist):
@@ -129,27 +116,6 @@ class NASAQuery(object):
         """
         import matisse_configuration as cfg
 
-        """
-        <Observation_time>2009-01-08T04:56:42.500</Observation_time>
-<SpaceCraft_clock_start_count>4/1313383.353</SpaceCraft_clock_start_count>
-<SpaceCraft_clock_stop_count>4/1314577.809</SpaceCraft_clock_stop_count>
-<Start_orbit_number>735</Start_orbit_number>
-<Stop_orbit_number>735</Stop_orbit_number>
-<UTC_start_time>2009-01-08T04:46:45.000</UTC_start_time>
-<UTC_stop_time>2009-01-08T05:06:40.000</UTC_stop_time>
-<Solar_distance_text>0.985107922514</Solar_distance_text>
-<Center_georeferenced>True</Center_georeferenced>
-<Center_latitude>-0.28</Center_latitude>
-<Center_longitude>15.016</Center_longitude>
-<BB_georeferenced>True</BB_georeferenced>
-<Easternmost_longitude>16.847</Easternmost_longitude>
-<Maximum_latitude>29.938</Maximum_latitude>
-<Minimum_latitude>-30.497</Minimum_latitude>
-<Westernmost_longitude>13.817</Westernmost_longitude>
-<Footprint_geometry>
-        """
-
-
         return {(key, self.read_nodelist(xml_tag.getElementsByTagName(value)))
                 for key, value in cfg.metadata.iteritems()}
 
@@ -167,27 +133,47 @@ class NASAQuery(object):
 
         """
 
+        info_files = {}
         files = []
+        try:
+            xmlNASA = urllib2.urlopen(a_url)
+            xmldoc = minidom.parseString(xmlNASA.read())
+            products = xmldoc.getElementsByTagName('Product')
 
-        xmlNASA = urllib2.urlopen(a_url)
-        xmldoc = minidom.parseString(xmlNASA.read())
-        products = xmldoc.getElementsByTagName('Product')
+            for a_tag in products:
 
-        for a_tag in products:
-            product_file = a_tag.getElementsByTagName("Product_file")
+                observation_id = self.read_nodelist(a_tag.getElementsByTagName('Observation_id'))
 
+                metadata = self.readMetadata(a_tag)
+                type_tag = a_tag.getElementsByTagName('Type')
 
-            type_tag = a_tag.getElementsByTagName('Type')
+                if self.read_nodelist(type_tag) == 'Product':
+                    url_tag = a_tag.getElementsByTagName('URL')
+                    files.append(self.read_nodelist(url_tag))
+                    info_files[observation_id] = {'metadata': metadata,
+                                                  'files': files}
+                    #one product file per <Product_file> tag
+                    #continue the loop
+                    continue
+            #no result: two options
+            #1- NASA page returns error
+            #2- query didn't produce output
+            if not files:
+                #check if there was an error
+                error = xmldoc.getElementsByTagName('Error')
+                if error:
+                    logging.critical("Error retrieving data for URL %s: \n" % a_url +
+                                     self.read_nodelist(error))
+                else:
+                    logging.critical("Query didn't produce any files. Please check parameters")
+                raise NASAQueryException
 
-            if self.read_nodelist(type_tag) == 'Product':
-                url_tag = a_tag.getElementsByTagName('URL')
-                files.append(self.read_nodelist(url_tag))
+        except urllib2.URLError as e:
+            logging.critical(e)
+        except expat.ExpatError as e:
+            logging.critical(e)
 
-        print files
-        return files
-
-
-
+        return info_files
 
     def associateFiles(self):
         """
@@ -199,8 +185,7 @@ class NASAQuery(object):
         """
         all_files, result = [], {}
 
-        for a_url in self.composeURLMoon():
-            print a_url
+        for a_url in self.composeURL():
             try:
                 tmp_result = self.fetchData(a_url)
 
@@ -270,10 +255,10 @@ if __name__ == "__main__":
   # Define the command line options
 
     requiredNamed = parser.add_argument_group('required  arguments')
-    requiredNamed.add_argument('--target', dest='target',
-                        help="PDS target name", required=True)
+    requiredNamed.add_argument('--target', dest='target', help="PDS target name", required=True)
     requiredNamed.add_argument('--ihid', dest='ihid', help="instrument host ID", required=True)
     requiredNamed.add_argument('--iid', dest='iid', help="instrument  ID", required=True)
+    requiredNamed.add_argument('--pt', dest='pt', help="product type", required=True)
 
     #coordinates (c1, c2, c3)
     parser.add_argument('--c1min', dest='westernlon', type=float,
