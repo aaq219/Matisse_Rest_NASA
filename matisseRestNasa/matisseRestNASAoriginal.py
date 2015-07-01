@@ -130,23 +130,7 @@ class NASAQuery(object):
         import matisse_configuration as cfg
 
         """
-        <Observation_time>2009-01-08T04:56:42.500</Observation_time>
-<SpaceCraft_clock_start_count>4/1313383.353</SpaceCraft_clock_start_count>
-<SpaceCraft_clock_stop_count>4/1314577.809</SpaceCraft_clock_stop_count>
-<Start_orbit_number>735</Start_orbit_number>
-<Stop_orbit_number>735</Stop_orbit_number>
-<UTC_start_time>2009-01-08T04:46:45.000</UTC_start_time>
-<UTC_stop_time>2009-01-08T05:06:40.000</UTC_stop_time>
-<Solar_distance_text>0.985107922514</Solar_distance_text>
-<Center_georeferenced>True</Center_georeferenced>
-<Center_latitude>-0.28</Center_latitude>
-<Center_longitude>15.016</Center_longitude>
-<BB_georeferenced>True</BB_georeferenced>
-<Easternmost_longitude>16.847</Easternmost_longitude>
-<Maximum_latitude>29.938</Maximum_latitude>
-<Minimum_latitude>-30.497</Minimum_latitude>
-<Westernmost_longitude>13.817</Westernmost_longitude>
-<Footprint_geometry>
+
         """
 
 

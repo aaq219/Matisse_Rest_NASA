@@ -10,7 +10,9 @@ import argparse
 
 import logging
 
-__REST_NASA__ = 'http://oderest.rsl.wustl.edu/live2/?target=moon&query=p&output=XML&'
+__REST_NASA__ = 'http://oderest.rsl.wustl.edu/live2/?query=p&output=XML&r=Mf'
+
+test_url='http://oderest.rsl.wustl.edu/live2/?target=moon&query=p&output=XML&ihid=CLEM&iid=HIRES&pt=EDR&r=fm&westernlon=10&easternlon=15&minlat=20&maxlat=25'
 
 """
 
@@ -52,7 +54,6 @@ required  arguments:
   --target TARGET       PDS target name
   --ihid IHID           instrument host ID
   --iid IID             instrument ID
-  --pt PT               product type
 """
 
 
@@ -69,37 +70,36 @@ class NASAQuery(object):
       target (str): target to query
       ihid (str): ID
       iid (str): instrument ID
-      pt (str): product type
     """
-    def __init__(self, target=None, ihid=None, iid=None, pt=None, **parameters):
+    def __init__(self, target=None, ihid=None, iid=None, **parameters):
 
         self.target = target
         self.ihid = ihid
         self.iid = iid
-        self.pt = pt
         #not mandatory parameter, this takes parameters dynamical
         for name, value in parameters.iteritems():
             setattr(self, name, value)
 
 
 
-    def composeURL(self):
+    def composeURLMoon(self):
         """
-         Need to compose two URLs:
-         1- product type pt=cdrnac -> calibrated products
-         2- product type pt=ddrnac -> derived  products
-         Return: the two urls
+         single URL:
+         compose the url with pt hardcoded 
+         TODO: consider if pt could have sense to be as parameter 
+         Return: url string 
         """
 
         parameters = '&'.join(['%s=%s' % (item, value) for item, value in self.__dict__.iteritems()
                                if value])
 
-        return __REST_NASA__ + '&pt=cdrnac&' + parameters, __REST_NASA__ + '&pt=ddrnac&' +parameters
+        return __REST_NASA__ + '&pt=EDR&' + parameters
 
     @staticmethod
     def read_nodelist(nodelist):
         """
         Utility method to read the content of a nodeList
+        :rtype : object
         :param nodelist:
         :return: string of the xml element
         """
@@ -115,91 +115,76 @@ class NASAQuery(object):
         :return: dictionary with all metadata read
         """
         import matisse_configuration as cfg
+     
+        metadata = {}
+        metadata['Observation_time'] = self.read_nodelist(xml_tag.getElementsByTagName('Observation_time'))
+        metadata['SpaceCraft_clock_start_count'] = self.read_nodelist(xml_tag.getElementsByTagName('SpaceCraft_clock_start_count'))
+        metadata['SpaceCraft_clock_stop_count'] = self.read_nodelist(xml_tag.getElementsByTagName('SpaceCraft_clock_stop_count'))
+        metadata['Start_orbit_number'] = self.read_nodelist(xml_tag.getElementsByTagName('Start_orbit_number'))
+        metadata['Stop_orbit_number'] = self.read_nodelist(xml_tag.getElementsByTagName('Stop_orbit_number'))
+        metadata['UTC_start_time'] = self.read_nodelist(xml_tag.getElementsByTagName('UTC_start_time'))
+        metadata['UTC_stop_time'] = self.read_nodelist(xml_tag.getElementsByTagName('UTC_stop_time'))
+        metadata['Solar_distance_text'] = self.read_nodelist(xml_tag.getElementsByTagName('Solar_distance_text'))
+        metadata['Center_georeferenced'] = self.read_nodelist(xml_tag.getElementsByTagName('Center_georeferenced'))
+        metadata['Center_latitude'] = self.read_nodelist(xml_tag.getElementsByTagName('Center_latitude'))
+        metadata['Center_longitude'] = self.read_nodelist(xml_tag.getElementsByTagName('Center_longitude'))
+        metadata['BB_georeferenced'] = self.read_nodelist(xml_tag.getElementsByTagName('BB_georeferenced'))
+        metadata['Easternmost_longitude'] = self.read_nodelist(xml_tag.getElementsByTagName('Easternmost_longitude'))
+        metadata['Maximum_latitude'] = self.read_nodelist(xml_tag.getElementsByTagName('Maximum_latitude'))
+        metadata['Minimum_latitude'] = self.read_nodelist(xml_tag.getElementsByTagName('Minimum_latitude'))
+        metadata['Westernmost_longitude'] = self.read_nodelist(xml_tag.getElementsByTagName('Westernmost_longitude'))
 
-        return {(key, self.read_nodelist(xml_tag.getElementsByTagName(value)))
-                for key, value in cfg.metadata.iteritems()}
+        return metadata
 
     def fetchData(self, a_url):
 
         """
-        Open the connection to the NASA Rest interface and  to find all the
-        files to download.
-        A file is indentified by the following sequence:
-        <type_of_file><ID>_<freq>_<file_version>.<type of the file>
-        e.g is CN0266147010M_IF_4.IMG
-
-        Return:
-            a list of URL where to download products files
+        TODO: write documentation
 
         """
 
         info_files = {}
-        files = []
-        try:
-            xmlNASA = urllib2.urlopen(a_url)
-            xmldoc = minidom.parseString(xmlNASA.read())
-            products = xmldoc.getElementsByTagName('Product')
 
-            for a_tag in products:
+        print a_url
+        xmlNASA = urllib2.urlopen(a_url)
+        xmldoc = minidom.parseString(xmlNASA.read())
+        #here select all the product tags
+        products = xmldoc.getElementsByTagName('Product')
+        for a_tag in products:
+            files = []
+            id_filename = None
+            metadata = self.readMetadata(a_tag)
+            #loops over the product tag and select for each product the product files
+            product_file = a_tag.getElementsByTagName("Product_file")
 
-                observation_id = self.read_nodelist(a_tag.getElementsByTagName('Observation_id'))
 
-                metadata = self.readMetadata(a_tag)
-                type_tag = a_tag.getElementsByTagName('Type')
-
+            for a_file in product_file:
+                #loop over the product_file for each product 
+                type_tag = a_file.getElementsByTagName('Type')
+                #select the type tag Product
                 if self.read_nodelist(type_tag) == 'Product':
-                    url_tag = a_tag.getElementsByTagName('URL')
-                    files.append(self.read_nodelist(url_tag))
-                    info_files[observation_id] = {'metadata': metadata,
-                                                  'files': files}
-                    #one product file per <Product_file> tag
-                    #continue the loop
-                    continue
-            #no result: two options
-            #1- NASA page returns error
-            #2- query didn't produce output
-            if not files:
-                #check if there was an error
-                error = xmldoc.getElementsByTagName('Error')
-                if error:
-                    logging.critical("Error retrieving data for URL %s: \n" % a_url +
-                                     self.read_nodelist(error))
-                else:
-                    logging.critical("Query didn't produce any files. Please check parameters")
-                raise NASAQueryException
+                    file_name = self.read_nodelist(a_file.getElementsByTagName('FileName'))
+                    string_array = file_name.split(".")
+                    id_filename = ".".join(string_array)
 
-        except urllib2.URLError as e:
-            logging.critical(e)
-        except expat.ExpatError as e:
-            logging.critical(e)
+                    files.append(self.read_nodelist(a_file.getElementsByTagName('URL')))
+
+                info_files[id_filename] = {'metadata': metadata, 'files':files}
+
 
         return info_files
 
+
+
+
     def associateFiles(self):
         """
-        Call the fetch data for all the composed URLs
-        fetch all information and associate the files to a unique ID
-        Return:
-           Dictionary key -> observation ID
-                      values -> associate files
+        TODO : write documentations
         """
-        all_files, result = [], {}
+        return  self.fetchData(self.composeURLMoon())
 
-        for a_url in self.composeURL():
-            try:
-                tmp_result = self.fetchData(a_url)
 
-                for key in tmp_result:
-                    if key in result:
-                        result[key]['files'].extend(tmp_result[key]['files'])
-                    else:
-                        result[key] = tmp_result[key]
 
-            except NASAQueryException as e:
-                logging.critical(e)
-                continue
-
-        return result
 
 
 def valid_date(s):
@@ -222,7 +207,7 @@ def valid_date(s):
         raise argparse.ArgumentTypeError(msg)
 
 
-def main(parser):
+def main(parser, id_filename=None, metadata=None, files=None):
 
     #creates the NASAQuery obj
     nq = NASAQuery()
@@ -240,13 +225,16 @@ def main(parser):
     #associate the files
     info_files = nq.associateFiles()
 
-    for key in info_files:
-        #skipping only geometry: needs both
-        if len(info_files[key]['files']) > 1:
-            logging.info('Observation ID: %s' % key)
-            logging.info('\n'.join(['%s: %s' % (metadata_key, metadata_value) for metadata_key, metadata_value
-                                     in info_files[key]['metadata']]))
-            logging.info("fileID: %s;\n files: \n%s" % (key, '\n'.join(info_files[key]['files'])))
+    for id_filename in info_files:
+        print "This is the File ID : %s" % id_filename
+        print "Metadata for the File"
+        metadata = info_files[id_filename]['metadata']
+        for k,v in metadata.iteritems():
+            print "%s: %s" % (k,v)
+        print "Associated Files"
+        for a_file in info_files[id_filename]['files']:
+            print a_file
+
 
 
 if __name__ == "__main__":
@@ -255,10 +243,10 @@ if __name__ == "__main__":
   # Define the command line options
 
     requiredNamed = parser.add_argument_group('required  arguments')
-    requiredNamed.add_argument('--target', dest='target', help="PDS target name", required=True)
+    requiredNamed.add_argument('--target', dest='target',
+                        help="PDS target name", required=True)
     requiredNamed.add_argument('--ihid', dest='ihid', help="instrument host ID", required=True)
     requiredNamed.add_argument('--iid', dest='iid', help="instrument  ID", required=True)
-    requiredNamed.add_argument('--pt', dest='pt', help="product type", required=True)
 
     #coordinates (c1, c2, c3)
     parser.add_argument('--c1min', dest='westernlon', type=float,
@@ -300,6 +288,3 @@ if __name__ == "__main__":
    
 
     main(parser)
-
-
-
