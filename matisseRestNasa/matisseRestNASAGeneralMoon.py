@@ -85,8 +85,7 @@ class NASAQuery(object):
     def composeURLMoon(self, pt):
         """
          single URL:
-         compose the url with pt hardcoded 
-         TODO: consider if pt could have sense to be as parameter 
+         compose the url with pt hardcoded
          Return: url string 
         """
 
@@ -122,11 +121,6 @@ class NASAQuery(object):
 
     def fetchDataMoonCH1_ORB(self, a_url):
 
-        """
-        TODO: write documentation
-
-        """
-
         info_files = {}
 
         xmlNASA = urllib2.urlopen(a_url)
@@ -159,12 +153,8 @@ class NASAQuery(object):
 
         return info_files
 
+
     def fetchDataMoonCLEM(self, a_url):
-
-        """
-        TODO: write documentation
-
-        """
 
         info_files = {}
         xmlNASA = urllib2.urlopen(a_url)
@@ -196,12 +186,7 @@ class NASAQuery(object):
         return info_files
 
 
-
-
-
-
-
-def main(parser, id_filename=None, metadata=None, files=None):
+def main(parser):
 
     #creates the NASAQuery obj
     nq = NASAQuery()
@@ -210,6 +195,7 @@ def main(parser, id_filename=None, metadata=None, files=None):
 
     #setup the logging
     log_format = "%(message)s"
+    if args.log:
         logging.basicConfig(filename=args.log, filemode='w',
                             format=log_format, level=logging.INFO)
     else:
@@ -239,7 +225,7 @@ def main(parser, id_filename=None, metadata=None, files=None):
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="")
-  # Define the command line options
+    #Define the command line options
 
     requiredNamed = parser.add_argument_group('required  arguments')
     requiredNamed.add_argument('--target', dest='target',
