@@ -85,8 +85,7 @@ class NASAQuery(object):
     def composeURLMoon(self):
         """
          single URL:
-         compose the url with pt hardcoded 
-         TODO: consider if pt could have sense to be as parameter 
+         compose the url with pt hardcoded
          Return: url string 
         """
 
@@ -114,6 +113,7 @@ class NASAQuery(object):
         :param: xml that contains al the metadata information
         :return: dictionary with all metadata read
         """
+
         import matisse_configuration as cfg
      
         metadata = {}
@@ -145,7 +145,6 @@ class NASAQuery(object):
 
         info_files = {}
 
-        print a_url
         xmlNASA = urllib2.urlopen(a_url)
         xmldoc = minidom.parseString(xmlNASA.read())
         #here select all the product tags
@@ -178,9 +177,7 @@ class NASAQuery(object):
 
 
     def associateFiles(self):
-        """
-        TODO : write documentations
-        """
+
         return  self.fetchData(self.composeURLMoon())
 
 
@@ -240,7 +237,7 @@ def main(parser, id_filename=None, metadata=None, files=None):
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="")
-  # Define the command line options
+    #Define the command line options
 
     requiredNamed = parser.add_argument_group('required  arguments')
     requiredNamed.add_argument('--target', dest='target',
