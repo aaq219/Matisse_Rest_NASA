@@ -85,8 +85,7 @@ class NASAQuery(object):
     def composeURLMoon(self):
         """
          single URL:
-         compose the url with pt hardcoded 
-         TODO: consider if pt could have sense to be as parameter 
+         compose the url with pt hardcoded
          Return: url string 
         """
 
@@ -174,9 +173,7 @@ class NASAQuery(object):
 
 
     def associateFiles(self):
-        """
-        TODO : write documentations
-        """
+
         return  self.fetchData(self.composeURLMoon())
 
 
