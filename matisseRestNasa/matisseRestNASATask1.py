@@ -138,11 +138,6 @@ class NASAQuery(object):
 
     def fetchData(self, a_url):
 
-        """
-        TODO: write documentation
-
-        """
-
         info_files = {}
 
         xmlNASA = urllib2.urlopen(a_url)

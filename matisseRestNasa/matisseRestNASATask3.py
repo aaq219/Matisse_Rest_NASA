@@ -1,17 +1,18 @@
 # -*- coding:utf-8 -*-
+import string
 import urllib2
+from datetime import datetime
 from xml.dom import minidom
+from xml.parsers import expat
 import argparse
-
-import utilities
-
-
 
 
 
 import logging
 
 __REST_NASA__ = 'http://oderest.rsl.wustl.edu/live2/?query=p&output=XML&r=Mfp'
+
+test_url='http://oderest.rsl.wustl.edu/live2/?target=moon&query=p&output=XML&ihid=LRO&iid=LROC&pt=CDRNAC&r=mp&westernlon=10&easternlon=15&minlat=20&maxlat=25'
 
 """
 
@@ -70,14 +71,7 @@ class NASAQuery(object):
       ihid (str): ID
       iid (str): instrument ID
     """
-
     def __init__(self, target=None, ihid=None, iid=None, **parameters):
-        """
-        Defines mandatory parameters for the observation
-        :param target: target of the observation
-        :param ihid: ihid (ID) of the observation
-        :param iid: iid (instrument ID) of the observation
-        """
 
         self.target = target
         self.ihid = ihid
@@ -88,7 +82,7 @@ class NASAQuery(object):
 
 
 
-    def composeURLMoon(self, pt):
+    def composeURLMoon(self):
         """
          single URL:
          compose the url with pt hardcoded
@@ -98,8 +92,7 @@ class NASAQuery(object):
         parameters = '&'.join(['%s=%s' % (item, value) for item, value in self.__dict__.iteritems()
                                if value])
 
-        return __REST_NASA__ + '&pt=%s&' %pt + parameters
-
+        return __REST_NASA__ + '&pt=CDRNAC&' + parameters
 
     @staticmethod
     def read_nodelist(nodelist):
@@ -109,74 +102,41 @@ class NASAQuery(object):
         :param nodelist:
         :return: string of the xml element
         """
-
         if nodelist:
             return " ".join(t.nodeValue for t in nodelist[0].childNodes if t.nodeType == t.TEXT_NODE)
         else:
             return None
 
-    def readMetadata(self, xml_tag, ihid):
+    def readMetadata(self, xml_tag):
         """
         Read the metadata of the observation
         :param: xml that contains al the metadata information
-        :param: ihid of the observation
         :return: dictionary with all metadata read
         """
+        #import matisse_configuration as cfg
+     
+        metadata = {}
+        metadata['Observation_time'] = self.read_nodelist(xml_tag.getElementsByTagName('Observation_time'))
+        metadata['SpaceCraft_clock_start_count'] = self.read_nodelist(xml_tag.getElementsByTagName('SpaceCraft_clock_start_count'))
+        metadata['SpaceCraft_clock_stop_count'] = self.read_nodelist(xml_tag.getElementsByTagName('SpaceCraft_clock_stop_count'))
+        metadata['Start_orbit_number'] = self.read_nodelist(xml_tag.getElementsByTagName('Start_orbit_number'))
+        metadata['Stop_orbit_number'] = self.read_nodelist(xml_tag.getElementsByTagName('Stop_orbit_number'))
+        metadata['UTC_start_time'] = self.read_nodelist(xml_tag.getElementsByTagName('UTC_start_time'))
+        metadata['UTC_stop_time'] = self.read_nodelist(xml_tag.getElementsByTagName('UTC_stop_time'))
+        metadata['Solar_distance_text'] = self.read_nodelist(xml_tag.getElementsByTagName('Solar_distance_text'))
+        metadata['Center_georeferenced'] = self.read_nodelist(xml_tag.getElementsByTagName('Center_georeferenced'))
+        metadata['Center_latitude'] = self.read_nodelist(xml_tag.getElementsByTagName('Center_latitude'))
+        metadata['Center_longitude'] = self.read_nodelist(xml_tag.getElementsByTagName('Center_longitude'))
+        metadata['BB_georeferenced'] = self.read_nodelist(xml_tag.getElementsByTagName('BB_georeferenced'))
+        metadata['Easternmost_longitude'] = self.read_nodelist(xml_tag.getElementsByTagName('Easternmost_longitude'))
+        metadata['Maximum_latitude'] = self.read_nodelist(xml_tag.getElementsByTagName('Maximum_latitude'))
+        metadata['Minimum_latitude'] = self.read_nodelist(xml_tag.getElementsByTagName('Minimum_latitude'))
+        metadata['Westernmost_longitude'] = self.read_nodelist(xml_tag.getElementsByTagName('Westernmost_longitude'))
+        metadata['Footprint_geometry'] = self.read_nodelist(xml_tag.getElementsByTagName('Footprint_geometry'))
 
-        import matisse_configuration as cfg
+        return metadata
 
-        return {(key, self.read_nodelist(xml_tag.getElementsByTagName(value)))
-                for key, value in cfg.getMetadata(ihid).iteritems()}
-
-
-    def fetchDataMoonCH1_ORB(self, a_url, ihid):
-        """
-        Extract observation metadata, ID name, and URL links (type LOC and RDN)
-        :param a_url: url of the observation
-        :param ihid: ihid of the observation
-        :return: info_files (metadata and associated files based on the file ID)
-        """
-
-        info_files = {}
-
-        xmlNASA = urllib2.urlopen(a_url)
-        xmldoc = minidom.parseString(xmlNASA.read())
-        #here select all the product tags
-        products = xmldoc.getElementsByTagName('Product')
-        for a_tag in products:
-            files = []
-            id_filename = None
-            metadata = self.readMetadata(a_tag, ihid)
-            #loops over the product tag and select for each product the product files
-            product_file = a_tag.getElementsByTagName("Product_file")
-
-
-            for a_file in product_file:
-                #loop over the product_file for each product 
-                type_tag = a_file.getElementsByTagName('Type')
-                #select the type tag Product
-                if self.read_nodelist(type_tag) == 'Product':
-                    file_name = self.read_nodelist(a_file.getElementsByTagName('FileName'))
-                    string_array = file_name.split("_")
-                    string_array.pop()
-                    id_filename = "_".join(string_array)
-                    if file_name.endswith('LOC.IMG') or file_name.endswith('LOC.HDR') or file_name.endswith('RDN.IMG') \
-                            or file_name.endswith('RDN.HDR'):
-                        files.append(self.read_nodelist(a_file.getElementsByTagName('URL')))
-
-                info_files[id_filename] = {'metadata': metadata, 'files':files}
-
-
-        return info_files
-
-
-    def fetchDataMoonCLEM(self, a_url, ihid):
-        """
-        Extract observation metadata, ID name, and URL links
-        :param a_url: url of the observation
-        :param ihid: ihid of the observation
-        :return: info_files (metadata and associated files based on the file ID)
-        """
+    def fetchData(self, a_url):
 
         info_files = {}
         xmlNASA = urllib2.urlopen(a_url)
@@ -185,51 +145,41 @@ class NASAQuery(object):
         products = xmldoc.getElementsByTagName('Product')
         for a_tag in products:
             files = []
-            id_filename = None
-            metadata = self.readMetadata(a_tag, ihid)
-            #loops over the product tag and select for each product the product files
-            product_file = a_tag.getElementsByTagName("Product_file")
-
-
-            for a_file in product_file:
-                #loop over the product_file for each product
-                type_tag = a_file.getElementsByTagName('Type')
-                #select the type tag Product
-                if self.read_nodelist(type_tag) == 'Product':
-                    file_name = self.read_nodelist(a_file.getElementsByTagName('FileName'))
-                    string_array = file_name.split(".")
-                    id_filename = ".".join(string_array)
-
-                    files.append(self.read_nodelist(a_file.getElementsByTagName('URL')))
-
-                info_files[id_filename] = {'metadata': metadata, 'files':files}
-
-
-        return info_files
-
-
-    def fetchDataMoonLRO(self, a_url, ihid):
-        """
-        Extract observation metadata + Footprint Geometry, ID name, and LabelURL links
-        :param a_url: url of the observation
-        :param ihid: ihid of the observation
-        :return: info_files (metadata and associated files based on the file ID)
-        """
-
-        info_files = {}
-        xmlNASA = urllib2.urlopen(a_url)
-        xmldoc = minidom.parseString(xmlNASA.read())
-        #here select all the product tags
-        products = xmldoc.getElementsByTagName('Product')
-        for a_tag in products:
-            files = []
-            metadata = self.readMetadata(a_tag, ihid)
+            metadata = self.readMetadata(a_tag)
             id_filename = self.read_nodelist(a_tag.getElementsByTagName('pdsid'))
             files.append(self.read_nodelist(a_tag.getElementsByTagName('LabelURL')))
             info_files[id_filename] = {'metadata': metadata, 'files':files}
 
 
         return info_files
+
+
+
+
+    def associateFiles(self):
+
+        return  self.fetchData(self.composeURLMoon())
+
+
+
+def valid_date(s):
+    """"
+    Validation of the command line options.
+    Check if a date is of the right format
+    e.g. = 2013-01-08T15:39:05.169
+
+    Arg: string
+    Return: string
+    Raise ArgumentTypeError
+    """
+
+    try:
+        datetime.strptime(s, "%Y-%m-%dT%H:%M:%S.%f")
+        #date string is well formatted
+        return s
+    except ValueError:
+        msg = "Not a valid date: '{0}'.".format(s)
+        raise argparse.ArgumentTypeError(msg)
 
 
 def main(parser):
@@ -247,36 +197,25 @@ def main(parser):
     else:
         logging.basicConfig(format=log_format, level=logging.INFO)
 
-
-    info_files = None
-
-    if nq.target == 'moon':
-        if nq.ihid == 'CH1-ORB' and nq.iid == 'M3':
-            info_files = nq.fetchDataMoonCH1_ORB(nq.composeURLMoon('CALIV3'), nq.ihid)
-        elif nq.ihid == 'CLEM' and nq.iid == 'HIRES':
-            info_files = nq.fetchDataMoonCLEM(nq.composeURLMoon('EDR'), nq.ihid)
-        else:
-            if nq.ihid == 'LRO' and nq.iid == 'LROC':
-                info_files = nq.fetchDataMoonLRO(nq.composeURLMoon('CDRNAC'), nq.ihid)
-
+    #associate the files
+    info_files = nq.associateFiles()
 
     for id_filename in info_files:
-
-        logging.info("This is the File ID : %s" % id_filename)
-        logging.info("Metadata for the File")
-        logging.info('\n'.join(['%s: %s' % (metadata_key, metadata_value) for metadata_key, metadata_value
-                                     in info_files[id_filename]['metadata']]))
-
-        logging.info("Associated Files")
+        print "This is the File ID : %s" % id_filename
+        print "Metadata for the File"
+        metadata = info_files[id_filename]['metadata']
+        for k,v in metadata.iteritems():
+            print "%s: %s" % (k,v)
+        print "Associated Files"
         for a_file in info_files[id_filename]['files']:
-            logging.info(a_file)
+            print a_file
 
 
 
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="")
-    #Define the command line options
+  # Define the command line options
 
     requiredNamed = parser.add_argument_group('required  arguments')
     requiredNamed.add_argument('--target', dest='target',
@@ -295,9 +234,9 @@ if __name__ == "__main__":
                         help="Max of second coordinate (in degrees by default) ")
 
     #times
-    parser.add_argument('--Time_min', dest='minobtime', type=utilities.valid_date,
+    parser.add_argument('--Time_min', dest='minobtime', type=valid_date,
                         help="Acquisition start time - format YYYY-MM-DDTHH:MM:SS.m")
-    parser.add_argument('--Time_max', dest='maxobtime', type=utilities.valid_date,
+    parser.add_argument('--Time_max', dest='maxobtime', type=valid_date,
                         help="Acquisition stop time - format YYYY-MM-DDTHH:MM:SS.m")
     #angles
 
@@ -324,3 +263,6 @@ if __name__ == "__main__":
    
 
     main(parser)
+
+
+

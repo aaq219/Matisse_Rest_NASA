@@ -24,3 +24,9 @@ metadata = OrderedDict([
     ("phase_angle_max", "Phase_angle")
 ])
 
+def getMetadata(ihid=None):
+
+    if ihid and ihid == "LRO":
+        metadata['Footprint_geometry'] = "Footprint_geometry"
+
+    return metadata
